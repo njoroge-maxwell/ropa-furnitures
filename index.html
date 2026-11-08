@@ -172,9 +172,16 @@ button.wood:hover{border-color:var(--amber)}
 .d-foot{max-height:62vh;overflow-y:auto;padding:14px 20px calc(16px + env(safe-area-inset-bottom));border-top:2px dashed var(--line);background:var(--linen)}
 .row{display:flex;justify-content:space-between;font-size:.88rem;margin-bottom:3px}
 .total{display:flex;justify-content:space-between;font-family:'Fraunces',serif;font-size:1.3rem;font-weight:500;margin:6px 0 10px}
-.seg{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:4px;overflow:hidden;margin-bottom:10px}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--line);border-radius:4px;overflow:hidden;margin-bottom:10px}
 .seg button{padding:8px;font-size:.76rem;transition:background .2s,color .2s}
 .seg button.on{background:var(--plum);color:#fff}
+.custom{margin-bottom:10px;animation:fadeUp .4s var(--ease) forwards;opacity:0}
+.custom label{display:block;font-family:'JetBrains Mono',monospace;font-size:.64rem;letter-spacing:.07em;text-transform:uppercase;opacity:.7;margin-bottom:4px}
+.kes{display:flex;align-items:center;border:1px solid var(--line);border-radius:4px;background:#fff;overflow:hidden;transition:border-color .2s,box-shadow .2s}
+.kes:focus-within{border-color:var(--teal);box-shadow:0 0 0 3px rgba(47,110,116,.18)}
+.kes span{padding:0 10px;font-family:'JetBrains Mono',monospace;font-size:.8rem;opacity:.65;background:var(--sand);align-self:stretch;display:flex;align-items:center}
+.kes input{flex:1;min-width:0;border:none;padding:11px 10px;font:inherit;font-family:'JetBrains Mono',monospace;font-size:1rem;background:transparent}
+.kes input:focus{outline:none}
 .pay{width:100%;padding:13px;border-radius:4px;font-weight:600;font-size:.9rem;display:flex;align-items:center;justify-content:center;gap:9px;transition:transform .15s,filter .2s,box-shadow .2s;position:relative;overflow:hidden}
 .pay:active{transform:scale(.98)}
 .pay:disabled{opacity:.45;cursor:not-allowed}
@@ -343,7 +350,14 @@ footer{background:var(--ink);color:var(--linen);padding:46px 20px 26px}
     <div class="seg" id="seg">
       <button class="on" data-m="full" onclick="setMode('full')">Pay in full</button>
       <button data-m="deposit" onclick="setMode('deposit')">50% deposit</button>
+      <button data-m="custom" onclick="setMode('custom')">Custom amount</button>
     </div>
+    <div class="custom" id="custom-row" hidden>
+      <label for="custom-amt">Amount to pay now</label>
+      <div class="kes"><span>KSh</span><input id="custom-amt" inputmode="numeric" autocomplete="off" placeholder="e.g. 10000"></div>
+      <div class="dnote" id="custom-note"></div>
+    </div>
+    <div class="dnote" id="pay-note" style="margin:-4px 0 10px"></div>
     <button class="pay pay-ps" id="ps-btn" onclick="payOnline()" disabled>
       <svg viewBox="0 0 24 24"><path d="M3 6a2 2 0 012-2h14a2 2 0 012 2v2H3zm0 4h18v8a2 2 0 01-2 2H5a2 2 0 01-2-2zm3 5v2h4v-2z"/></svg>
       <span id="ps-label">Pay online · Card / M-Pesa</span>
@@ -374,6 +388,7 @@ const ORDER_NUMBER_ENDPOINT = "/.netlify/functions/order-number"; // gives each 
 const DELIVERY_ENDPOINT = "/.netlify/functions/delivery"; // Fargo delivery (hidden until set up, see README)
 const PAYMENT_ENDPOINT = "/.netlify/functions/paystack"; // Paystack backend (see README)
 const DEPOSIT_RATE = 0.5;
+const MIN_PAYMENT = 100;   // smallest custom amount a customer can pay online (KSh)
 const OWNER_WHATSAPP = "254719378579";                 // Ropa's WhatsApp number: international format, no + or spaces
 /* ================= CATALOGUE (from Ropa_Furniture_Catalogue.docx) ================= */
 const PRODUCTS = [
@@ -404,6 +419,7 @@ const picked = {};          // id -> chosen wood
 let orderId = null;   // assigned (sequentially) only when the customer sends the order
 let sent = false;
 let mode = "full";
+let customAmount = null;
 let deliveryOn = false, town = null, deliveryFee = null, quoting = false, lastSig = "", savedTown = null, qTimer = null;
 function showOid(){$("#oid").textContent=orderId?"#"+orderId:"draft"}
 showOid();
@@ -413,7 +429,7 @@ function toast(msg, ms=3800){const t=$("#toast");t.textContent=msg;t.classList.a
 /* ================= keep the order across reloads ================= */
 const STORE="ropa_cart_v1";
 function saveCart(){
-  try{localStorage.setItem(STORE,JSON.stringify({order,orderId,sent,picked,mode,town,c:{name:$("#c-name").value,phone:$("#c-phone").value,email:$("#c-email").value,area:$("#c-area").value,note:$("#c-note").value}}))}catch(_){}
+  try{localStorage.setItem(STORE,JSON.stringify({order,orderId,sent,picked,mode,customAmount,town,c:{name:$("#c-name").value,phone:$("#c-phone").value,email:$("#c-email").value,area:$("#c-area").value,note:$("#c-note").value}}))}catch(_){}
 }
 function loadCart(){
   try{
@@ -421,7 +437,8 @@ function loadCart(){
     Object.entries(d.order||{}).forEach(([k,q])=>{const[id,wood]=k.split("|"),p=byId(id);if(p&&p.woods.includes(wood)&&Number.isInteger(q)&&q>0&&q<=20)order[k]=q});
     Object.entries(d.picked||{}).forEach(([id,w])=>{const p=byId(id);if(p&&p.woods.includes(w))picked[id]=w});
     if(d.sent&&Object.keys(order).length){sent=true;$("#confirm").classList.add("show")}
-    if(d.mode==="deposit"||d.mode==="full")mode=d.mode;
+    if(d.mode==="deposit"||d.mode==="full"||d.mode==="custom")mode=d.mode;
+    if(Number.isInteger(d.customAmount)){customAmount=d.customAmount;$("#custom-amt").value=String(d.customAmount)}
     savedTown=d.town||null;
     if(d.orderId){orderId=d.orderId}
     const c=d.c||{};
@@ -510,7 +527,8 @@ const entries=()=>Object.entries(order).map(([k,q])=>{const[id,wood]=k.split("|"
 const totalPrice=()=>entries().reduce((s,e)=>s+e.p.price*e.qty,0);
 const realTown=()=>deliveryOn&&town&&town.id!=="pickup";
 const orderTotal=()=>totalPrice()+(realTown()&&deliveryFee!==null?deliveryFee:0);
-const payAmount=()=>mode==="deposit"?Math.ceil(orderTotal()*DEPOSIT_RATE):orderTotal();
+const customValid=()=>Number.isInteger(customAmount)&&customAmount>=MIN_PAYMENT&&customAmount<=orderTotal();
+const payAmount=()=>mode==="deposit"?Math.ceil(orderTotal()*DEPOSIT_RATE):mode==="custom"?(customValid()?customAmount:0):orderTotal();
 
 function renderOrder(){
   const es=entries(),qty=es.reduce((s,e)=>s+e.qty,0);
@@ -526,8 +544,13 @@ function renderOrder(){
   const tn=$("#town-note");
   tn.textContent=realTown()&&!quoting&&deliveryFee===null?"We couldn't get the delivery price online. Send your order on WhatsApp and we'll confirm it with you.":"";
   $("#wa-btn").disabled=!es.length;
-  $("#ps-btn").disabled=!es.length||(realTown()&&(quoting||deliveryFee===null));
-  $("#ps-label").textContent=es.length?`Pay ${fmt(payAmount())} · Card / M-Pesa`:"Pay online · Card / M-Pesa";
+  const needsAmount=mode==="custom"&&!customValid();
+  $("#ps-btn").disabled=!es.length||needsAmount||(realTown()&&(quoting||deliveryFee===null));
+  $("#ps-label").textContent=!es.length?"Pay online · Card / M-Pesa":needsAmount?"Enter an amount to pay online":`Pay ${fmt(payAmount())} · Card / M-Pesa`;
+  $("#custom-row").hidden=mode!=="custom";
+  const cn=$("#custom-note"),pn=$("#pay-note"),amt=payAmount();
+  cn.textContent=mode==="custom"&&es.length?(customAmount===null?`Type how much you'd like to pay now (minimum ${fmt(MIN_PAYMENT)}).`:customAmount>orderTotal()?`That's more than your order total (${fmt(orderTotal())}).`:customAmount<MIN_PAYMENT?`The minimum is ${fmt(MIN_PAYMENT)}.`:""):"";
+  pn.textContent=es.length&&mode!=="full"&&amt>0&&amt<orderTotal()?`Paying ${fmt(amt)} now · balance of ${fmt(orderTotal()-amt)} to pay later.`:"";
   if(!es.length){sent=false;orderId=null;$("#confirm").classList.remove("show")}
   showOid();
   saveCart();
@@ -569,7 +592,7 @@ function deliveryLines(){
   if(town.id==="pickup") return "Delivery: collect in Nakuru (no fee)\n";
   return deliveryFee!==null?`Delivery to ${town.name}: ${fmt(deliveryFee)}\n`:`Delivery to ${town.name}: to be confirmed\n`;
 }
-function setMode(m){mode=m;document.querySelectorAll("#seg button").forEach(b=>b.classList.toggle("on",b.dataset.m===m));renderOrder()}
+function setMode(m){mode=m;document.querySelectorAll("#seg button").forEach(b=>b.classList.toggle("on",b.dataset.m===m));renderOrder();if(m==="custom")setTimeout(()=>$("#custom-amt").focus(),50)}
 function openDrawer(){$("#drawer").classList.add("open");$("#overlay").classList.add("open");renderOrder()}
 function closeDrawer(){$("#drawer").classList.remove("open");$("#overlay").classList.remove("open")}
 addEventListener("keydown",e=>{if(e.key==="Escape"){closeDrawer();closeLb()}});
@@ -630,7 +653,7 @@ async function payOnline(){
   btn.disabled=true;label.textContent="Connecting to Paystack…";
   try{
     await ensureOrderId();
-    const res=await fetch(PAYMENT_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items:entries().map(e=>({id:e.id,wood:e.wood,qty:e.qty})),mode,orderNumber:orderId,townId:realTown()?town.id:null,customer:c})});
+    const res=await fetch(PAYMENT_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items:entries().map(e=>({id:e.id,wood:e.wood,qty:e.qty})),mode,customAmount:mode==="custom"?customAmount:null,orderNumber:orderId,townId:realTown()?town.id:null,customer:c})});
     const data=await res.json().catch(()=>({}));
     if(!res.ok||!data.redirect_url) throw Object.assign(new Error(data.error||"Payment service unavailable"),{user:res.status===400});
     try{localStorage.setItem("ropa_pending",JSON.stringify({num:orderId,ref:data.merchant_reference,lines:orderLines(false),total:orderTotal(),amount:data.amount,mode,name:c.name,area:c.area}))}catch(_){}
@@ -654,8 +677,13 @@ async function checkReturn(){
   const b=$("#banner"),ok=status==="completed",pend=!status||status==="pending";
   b.classList.toggle("fail",!ok&&!pend);
   $("#b-title").textContent=ok?"Payment received — thank you!":pend?"Payment is being processed":"Payment didn't go through";
-  $("#b-text").textContent=ok?`Your ${pending.mode==="deposit"?"deposit":"payment"} of ${fmt(pending.amount||0)} is confirmed${pending.ref?" (ref "+pending.ref+")":""}. Send us a quick WhatsApp so we can start on your order.`:pend?"We'll confirm as soon as Paystack reports back. You can also message us on WhatsApp.":"No money was taken. You can try again, or order through WhatsApp.";
-  const msg=`*Payment confirmation — Ropa Furniture*\nOrder ID: #${pending.num||"-"}\nRef: ${pending.ref||tid}\n\n${pending.lines||""}\n\n${ok?"Paid":"Payment status: "+(status||"pending")}: *${fmt(pending.amount||0)}* via Paystack${pending.mode==="deposit"?" (50% deposit)":""}\nName: ${pending.name||""}${pending.area?"\nDelivery: "+pending.area:""}\n\nThank you, Ropa Furniture!`;
+  const paid=pending.amount||0,total=pending.total||0,bal=total>0?Math.max(total-paid,0):0;
+  const kind=pending.mode==="deposit"?"50% deposit":pending.mode==="custom"?"part payment":"full payment";
+  $("#b-text").textContent=ok?`Your ${kind} of ${fmt(paid)} is confirmed${pending.ref?" (ref "+pending.ref+")":""}.${bal>0?" Balance to pay: "+fmt(bal)+".":""} Send us a quick WhatsApp so we can start on your order.`:pend?"We'll confirm as soon as Paystack reports back. You can also message us on WhatsApp.":"No money was taken. You can try again, or order through WhatsApp.";
+  const payLines=ok
+    ?`Amount paid: *${fmt(paid)}* (${kind}) via Paystack${total>0?`\nOrder total: ${fmt(total)}\nBalance: ${bal>0?fmt(bal):"none, paid in full"}`:""}`
+    :`Payment status: ${status||"pending"}\nAmount: ${fmt(paid)} (${kind})`;
+  const msg=`*Payment confirmation — Ropa Furniture*\nOrder ID: #${pending.num||"-"}\nRef: ${pending.ref||tid}\n\n${pending.lines||""}\n\n${payLines}\n\nName: ${pending.name||""}${pending.area?"\nDelivery: "+pending.area:""}\n\nThank you, Ropa Furniture!`;
   $("#b-btns").innerHTML=`<a class="btn btn-primary" target="_blank" href="https://wa.me/${OWNER_WHATSAPP}?text=${encodeURIComponent(msg)}">Send confirmation on WhatsApp</a><button class="btn btn-ghost" onclick="document.getElementById('banner').classList.remove('show')">Close</button>`;
   setTimeout(()=>b.classList.add("show"),500);
   if(ok){try{localStorage.removeItem("ropa_pending")}catch(_){}order={};renderOrder()}
@@ -664,6 +692,7 @@ async function checkReturn(){
 loadCart();
 document.querySelectorAll("#form input,#form textarea").forEach(el=>el.addEventListener("input",saveCart));
 document.querySelectorAll("#seg button").forEach(b=>b.classList.toggle("on",b.dataset.m===mode));
+$("#custom-amt").addEventListener("input",e=>{const d=e.target.value.replace(/\D/g,"").slice(0,7);e.target.value=d;customAmount=d?parseInt(d,10):null;renderOrder()});
 renderCatalog();
 renderOrder();
 initDelivery();

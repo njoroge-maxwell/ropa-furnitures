@@ -28,6 +28,12 @@ The key decides the mode: sk_test_ = practice (no real money), sk_live_ = real p
 Paystack needs the customer's email, so the website asks for it when paying online. Each payment shows the order number,
 customer, phone, delivery area and items in your Paystack dashboard.
 
+## Payment choices for customers
+Pay in full, 50% deposit, or a custom amount (they type how much to pay now). The smallest custom amount is
+MIN_PAYMENT (KSh 100) — set it in BOTH index.html and netlify/functions/paystack.js if you want a different minimum
+(for example KSh 1,000). The custom amount can't be more than the order total. After paying, the WhatsApp confirmation
+shows the amount paid, the order total and the balance left.
+
 ## Notes
 - Prices: change them in PRODUCTS (index.html) AND lib/catalog.js.
 - Order numbers are stored in Netlify (Blobs, store "ropa-orders"); START (in order-number.mjs) sets the first number.
