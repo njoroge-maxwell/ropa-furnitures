@@ -1,4 +1,4 @@
-// Ropa Furnitures — delivery towns and delivery price (via Fargo Courier).
+// Ropa Furniture — delivery towns and delivery price (via Fargo Courier).
 // If Fargo isn't set up (see lib/fargo.js), this simply says "disabled" and the website hides the delivery option.
 const { CATALOG } = require("./lib/catalog");
 const fargo = require("./lib/fargo");

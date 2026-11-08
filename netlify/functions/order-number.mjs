@@ -1,4 +1,4 @@
-// Ropa Furnitures — hands out sequential order numbers (1001, 1002, 1003 …).
+// Ropa Furniture — hands out sequential order numbers (1001, 1002, 1003 …).
 // Each number is "claimed" with an atomic write-if-new in Netlify Blobs, so two customers
 // can never receive the same number, even if they order at the same moment.
 import { getStore } from "@netlify/blobs";

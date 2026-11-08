@@ -68,7 +68,7 @@ async function quote(lines, townId, who = {}) {
       dropoff: townId, pickup: pickupTown(), product_sku: "ROPA-" + l.id,
       to_building: "", to_street: who.area || "", to_suburb: who.area || "", to_additionalinfo: "",
       firstname: first, lastname: rest.join(" "), telephone: who.phone || "", email: who.email || "",
-      from_firstname: "Ropa Furnitures", from_lastname: "", from_email: env("FARGO_FROM_EMAIL"),
+      from_firstname: "Ropa Furniture", from_lastname: "", from_email: env("FARGO_FROM_EMAIL"),
       from_building: "", from_street: "", from_suburb: "Nakuru", from_additionalinfo: "Nakuru", from_telephone: "0719378579",
     };
   });
